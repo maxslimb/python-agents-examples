@@ -1,17 +1,11 @@
-from enum import Enum
-
-
-class AgentType(Enum):
-    Audio = 1 << 0
-    Video = 1 << 1
-
+import livekit
 
 class Agent:
-    def get_type(self) -> AgentType:
+    def on_video_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.VideoFrame):
+        raise NotImplementedError
+    
+    def on_audio_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.AudioFrame):
         raise NotImplementedError
 
-    def required_processors(self) -> [str]:
+    def should_process(self, track: livekit.Track, participant: livekit.Participant) -> bool:
         raise NotImplementedError
-
-    def track_filter(self, track, participant) -> bool:
-        return True
