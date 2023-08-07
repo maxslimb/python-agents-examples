@@ -4,7 +4,7 @@ from agents.agent import Agent
 
 
 class Transcription(Agent):
-    def __init__(self):
+    def initialize(self):
         self.whisper = Whisper()
 
     # TODO: Implement this, should only process on audio tracks
@@ -12,4 +12,7 @@ class Transcription(Agent):
         return True
 
     def on_audio_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.AudioFrame):
-        return super().on_audio_frame(track, participant, frame)
+        self.whisper.process_audio_frame(frame)
+
+    def on_video_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.VideoFrame):
+        raise NotImplementedError
