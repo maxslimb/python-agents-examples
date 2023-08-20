@@ -1,5 +1,5 @@
 aiohttp
+aiohttp_cors
 numpy
 livekit
-flask
-flask-cors
+python-dotenv
