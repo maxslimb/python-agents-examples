@@ -55,9 +55,3 @@ class Agent:
 
     def _on_track_unsubscribed(self, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
         pass
-
-    def has_non_agent_participants(self) -> bool:
-        for participant in self.room.participants:
-            if participant != self.participant:
-                return True
-        return False
