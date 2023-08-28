@@ -1,10 +1,7 @@
 import livekit
-from typing import TypedDict
-from typing_extensions import Unpack
-
 
 class Agent:
-    def __init__(self, *args, participant: livekit.LocalParticipant, room: livekit.Room):
+    def __init__(self, *_, participant: livekit.LocalParticipant, room: livekit.Room):
         self.participant = participant
         self.room = room
         self.room.on("participant_connected",
@@ -30,7 +27,7 @@ class Agent:
     def on_audio_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.AudioFrame):
         raise NotImplementedError
 
-    def should_process(self, track: livekit.Track, participant: livekit.Participant) -> bool:
+    def should_process(self, track: livekit.TrackPublication, participant: livekit.Participant) -> bool:
         raise NotImplementedError
 
     def on_participants_changed(self, participants: [livekit.Participant]):
@@ -40,8 +37,13 @@ class Agent:
         self.participants = self.room.participants
         self.on_participants_changed(self.participants)
 
-    def _on_track_published(self):
-        pass
+    def _on_track_published(self, publication: livekit.RemoteTrackPublication, participant: livekit.Participant):
+        # Don't do anything for our own tracks
+        if participant.sid == self.participant.sid:
+            return
+
+        if self.should_process(publication, participant):
+            publication.set_subscribed(True)
 
     def _on_track_subscribed(self, track: livekit.Track, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
         if publication.kind == livekit.TrackKind.VIDEO:
