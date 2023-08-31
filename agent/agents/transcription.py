@@ -8,7 +8,11 @@ class Transcription(Agent):
         self.whisper = Whisper()
 
     def on_audio_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.AudioFrame):
-        self.whisper.process_audio_frame(frame)
+        print("on_audio_frame")
 
     def on_video_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.VideoFrame):
-        raise NotImplementedError
+        print("on_video_frame")
+
+    def should_process(self, track: livekit.TrackPublication, participant: livekit.Participant) -> bool:
+        print("should process", participant.identity)
+        return track.kind == livekit.TrackKind.AUDIO

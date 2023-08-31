@@ -1,3 +1,4 @@
+import logging
 import livekit
 
 class Agent:
@@ -34,10 +35,12 @@ class Agent:
         pass
 
     def _on_participant_connected_or_disconnected(self, *args):
+        print("NEIL on participant connected or disconnected")
         self.participants = self.room.participants
         self.on_participants_changed(self.participants)
 
     def _on_track_published(self, publication: livekit.RemoteTrackPublication, participant: livekit.Participant):
+        print("NEIL on track published")
         # Don't do anything for our own tracks
         if participant.sid == self.participant.sid:
             return

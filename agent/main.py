@@ -32,6 +32,7 @@ async def add_agent(request):
     if agent_type == 'transcription':
         print('A transcription agent is being added')
         await room.connect(ws_url, token)
+        print('Connected to room')
         participant = room.local_participant
         transcription = Transcription(participant=participant, room=room)
         AGENTS.append(transcription)
