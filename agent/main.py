@@ -3,6 +3,7 @@ import livekit
 import aiohttp
 import aiohttp_cors
 import dotenv
+import asyncio
 
 from agents.transcription import Transcription
 from agents.agent import Agent
@@ -27,12 +28,12 @@ async def add_agent(request):
             json_response = await response.json()
             ws_url = json_response['ws_url']
             token = json_response['token']
+            print(f'ws_url: {ws_url} token: {token}')
 
     room = livekit.Room()
+    await room.connect(ws_url, token)
+
     if agent_type == 'transcription':
-        print('A transcription agent is being added')
-        await room.connect(ws_url, token)
-        print('Connected to room')
         participant = room.local_participant
         transcription = Transcription(participant=participant, room=room)
         AGENTS.append(transcription)
@@ -46,5 +47,13 @@ cors = aiohttp_cors.setup(app, defaults={"*": aiohttp_cors.ResourceOptions(
 for route in list(app.router.routes()):
     cors.add(route)
 
+async def main():
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    site = aiohttp.web.TCPSite(runner, host='0.0.0.0', port=PORT)    
+    await site.start()
+    await asyncio.Event().wait()
+
 if __name__ == "__main__":
-    aiohttp.web.run_app(app, port=PORT, host='0.0.0.0')
+    main_task = asyncio.ensure_future(main())
+    asyncio.get_event_loop().run_until_complete(main_task)

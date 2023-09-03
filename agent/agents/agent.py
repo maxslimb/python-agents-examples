@@ -1,5 +1,8 @@
 import logging
 import livekit
+from collections.abc import Callable, Awaitable
+
+Should_Process_CB = Callable[[livekit.TrackPublication, livekit.Participant], Awaitable[bool]]
 
 class Agent:
     def __init__(self, *_, participant: livekit.LocalParticipant, room: livekit.Room):
@@ -13,34 +16,38 @@ class Agent:
         self.room.on("track_unsubscribed", self._on_track_unsubscribed)
         self.room.on("track_published", self._on_track_published)
         self.participants = self.room.participants
+        self.should_process_cb = None
 
-        self.initialize()
+        self._handle_existing_tracks()
+        self.audio_streams = []
+        self.video_streams = []
 
     async def cleanup(self):
         await self.room.disconnect()
 
-    def initialize(self):
-        raise NotImplementedError
+    def _handle_existing_tracks(self):
+        for participantKey in self.participants:
+            for publicationKey in self.participants[participantKey].tracks:
+                publication = self.participants[participantKey].tracks[publicationKey]
+                self._on_track_published(publication, self.participants[participantKey])
 
     def on_video_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.VideoFrame):
-        raise NotImplementedError
+        pass
 
     def on_audio_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.AudioFrame):
-        raise NotImplementedError
+        pass
 
     def should_process(self, track: livekit.TrackPublication, participant: livekit.Participant) -> bool:
-        raise NotImplementedError
+        pass
 
     def on_participants_changed(self, participants: [livekit.Participant]):
         pass
 
     def _on_participant_connected_or_disconnected(self, *args):
-        print("NEIL on participant connected or disconnected")
         self.participants = self.room.participants
         self.on_participants_changed(self.participants)
 
     def _on_track_published(self, publication: livekit.RemoteTrackPublication, participant: livekit.Participant):
-        print("NEIL on track published")
         # Don't do anything for our own tracks
         if participant.sid == self.participant.sid:
             return
@@ -49,12 +56,15 @@ class Agent:
             publication.set_subscribed(True)
 
     def _on_track_subscribed(self, track: livekit.Track, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
-        if publication.kind == livekit.TrackKind.VIDEO:
+        if publication.kind == 1:
+            audio_stream = livekit.AudioStream(track)
+            audio_stream.on("frame_received", lambda frame: self.on_audio_frame(track, participant, frame))
+            self.audio_streams.append(audio_stream)
+        elif publication.kind == 2:
             video_stream = livekit.VideoStream(track)
-            video_stream.on("video_frame", lambda frame: self.on_video_frame(track, participant, frame))
-        elif publication.kind == livekit.TrackKind.AUDIO:
-            audio_stream = livekit.VideoStream(track)
-            audio_stream.on("audio_frame", lambda frame: self.on_audio_frame(track, participant, frame))
+            video_stream.on("frame_received", lambda frame: self.on_video_frame(track, participant, frame))
+            self.video_streams.append(video_stream)
 
     def _on_track_unsubscribed(self, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
-        pass
+        self.audio_streams = [stream for stream in self.audio_streams if stream.track.sid != publication.track_sid]
+        self.video_streams = [stream for stream in self.video_streams if stream.track.sid != publication.track_sid]
