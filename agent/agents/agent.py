@@ -1,5 +1,6 @@
-import logging
+import asyncio
 import livekit
+import agents.stream as stream
 from collections.abc import Callable, Awaitable
 
 Should_Process_CB = Callable[[livekit.TrackPublication, livekit.Participant], Awaitable[bool]]
@@ -21,6 +22,7 @@ class Agent:
         self._handle_existing_tracks()
         self.audio_streams = []
         self.video_streams = []
+        self.stream_tasks = set()
 
     async def cleanup(self):
         await self.room.disconnect()
@@ -31,10 +33,21 @@ class Agent:
                 publication = self.participants[participantKey].tracks[publicationKey]
                 self._on_track_published(publication, self.participants[participantKey])
 
-    def on_video_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.VideoFrame):
+    def _on_video_stream(self, agent_stream: stream.VideoStream, participant: livekit.Participant, track: livekit.Track):
+        self.video_streams.append(agent_stream)
+        task = asyncio.get_event_loop().create_task(self.on_video_stream(agent_stream, participant, track))
+        asyncio.get_event_loop().call_soon_threadsafe(task)
+
+    def _on_audio_stream(self, agent_stream: stream.AudioStream, participant: livekit.Participant, track: livekit.Track):
+        self.audio_streams.append(agent_stream)
+        task = asyncio.create_task(self.on_audio_stream(agent_stream, participant, track))
+        self.stream_tasks.add(task)
+        task.add_done_callback(self.stream_tasks.discard)
+
+    async def on_video_stream(self, agent_stream: stream.VideoStream, participant: livekit.Participant, track: livekit.Track):
         pass
 
-    def on_audio_frame(self, track: livekit.Track, participant: livekit.Participant, frame: livekit.AudioFrame):
+    async def on_audio_stream(self, agent_stream: stream.AudioStream, participant: livekit.Participant, track: livekit.Track):
         pass
 
     def should_process(self, track: livekit.TrackPublication, participant: livekit.Participant) -> bool:
@@ -58,12 +71,12 @@ class Agent:
     def _on_track_subscribed(self, track: livekit.Track, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
         if publication.kind == 1:
             audio_stream = livekit.AudioStream(track)
-            audio_stream.on("frame_received", lambda frame: self.on_audio_frame(track, participant, frame))
-            self.audio_streams.append(audio_stream)
+            agent_audio_stream = stream.AudioStream(audio_stream)
+            self._on_audio_stream(agent_audio_stream, participant, track)
         elif publication.kind == 2:
             video_stream = livekit.VideoStream(track)
-            video_stream.on("frame_received", lambda frame: self.on_video_frame(track, participant, frame))
-            self.video_streams.append(video_stream)
+            agent_video_stream = stream.VideoStream(video_stream)
+            self._on_video_stream(agent_video_stream, participant, track)
 
     def _on_track_unsubscribed(self, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
         self.audio_streams = [stream for stream in self.audio_streams if stream.track.sid != publication.track_sid]
