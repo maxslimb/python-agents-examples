@@ -14,9 +14,6 @@ class Transcription(Agent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.whisper = Whisper.from_pretrained("tiny.en")
-        self.track_sid_sample_rates: {str: float} = {}
-        self.track_sid_buffers: {str: np.ndarray} = {}
-        self.track_sid_written_samples: {str: int} = {}
 
     async def on_audio_stream(
         self,
