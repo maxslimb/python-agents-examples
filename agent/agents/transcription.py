@@ -1,4 +1,3 @@
-import threading
 import livekit
 from whispercpp import Whisper
 import numpy as np
