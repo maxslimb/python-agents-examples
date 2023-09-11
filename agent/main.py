@@ -38,6 +38,7 @@ async def add_agent(request):
         transcription = Transcription(participant=participant, room=room)
         AGENTS.append(transcription)
 
+    asyncio.create_task(room.run())
     return aiohttp.web.json_response({'success': True})
 
 app = aiohttp.web.Application()
