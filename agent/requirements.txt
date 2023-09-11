@@ -7,9 +7,9 @@ cffi==1.15.1
 charset-normalizer==3.2.0
 frozenlist==1.4.0
 idna==3.4
-livekit==0.2.5
+livekit==0.3.3
 multidict==6.0.4
-numpy==1.25.2
+numpy==1.24.3
 protobuf==4.24.0
 pycparser==2.21
 pyee==11.0.0
@@ -17,5 +17,4 @@ python-dotenv==1.0.0
 samplerate==0.1.0
 types-protobuf==4.24.0.1
 typing_extensions==4.7.1
-whispercpp @ git+https://github.com/aarnphm/whispercpp.git@f6fac8ecde344593f29a93187631b84588550c8e
 yarl==1.9.2
