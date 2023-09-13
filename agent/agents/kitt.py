@@ -1,14 +1,17 @@
-import asyncio
 import livekit
 import numpy as np
 from lib.whisper.whisper import Whisper
 from agents.agent import Agent
 
 
+SECONDS_PER_WHISPER_INFERENCE = 3
 WHISPER_SAMPLE_RATE = 16000
 
 
-class Transcription(Agent):
+class Kitt(Agent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.whisper = Whisper("tiny.en")
 
     async def on_audio_stream(
         self,
@@ -19,16 +22,17 @@ class Transcription(Agent):
         if participant.identity != "caller":
             return
 
-        whisper = Whisper()
-        asyncio.create_task(self.print_whisper_results(whisper))
+        written_samples = 0
+        buffer = np.zeros(WHISPER_SAMPLE_RATE * SECONDS_PER_WHISPER_INFERENCE, dtype=np.float32)
         async for frame in stream:
             resampled = frame.remix_and_resample(WHISPER_SAMPLE_RATE, 1)
             data = np.array(resampled.data, dtype=np.float32) / 32768.0
-            whisper.add_buffer(data)
+            buffer[written_samples: written_samples + len(data)] = data
+            written_samples += len(data)
 
-    async def print_whisper_results(self, whisper: Whisper):
-        async for event in whisper:
-            print(f"transcription event: {event.type} - text: {event.text} - seconds: {event.time_seconds}")
+            if written_samples >= WHISPER_SAMPLE_RATE * SECONDS_PER_WHISPER_INFERENCE:
+                print(self.whisper.transcribe(buffer))
+                written_samples = 0
 
     def should_process(
         self, track: livekit.TrackPublication, participant: livekit.Participant
