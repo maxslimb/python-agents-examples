@@ -17,7 +17,7 @@ EVENT_TYPE_MONOLOGUE_FINISHED = "monologue_finished"
 EVENT_TYPE_MONOLOGUE_UPDATED = "monologue_updated"
 EVENT_TYPE_NO_SPEECH = "no_speech"
 
-class Whisper:
+class Transcriber:
 
     @dataclass
     class Event:
@@ -35,7 +35,7 @@ class Whisper:
         self._last_text = ""
         self._current_id = 1
         self._silence_buffer_count = 0
-        self._event_queue = asyncio.Queue[Whisper.Event]()
+        self._event_queue = asyncio.Queue[Transcriber.Event]()
 
     def __aiter__(self):
         return self
@@ -89,37 +89,37 @@ class Whisper:
         self._in_monologue = True
         self._silence_buffer_count = 0
         self._current_id += 1
-        self._event_queue.put_nowait(Whisper.Event(id=self._current_id,
-                                                   text=self._last_text,
-                                                   type=EVENT_TYPE_MONOLOGUE_STARTED,
-                                                   time_seconds=self._write_index / WHISPER_SAMPLE_RATE))
+        self._event_queue.put_nowait(Transcriber.Event(id=self._current_id,
+                                                       text=self._last_text,
+                                                       type=EVENT_TYPE_MONOLOGUE_STARTED,
+                                                       time_seconds=self._write_index / WHISPER_SAMPLE_RATE))
 
     def _update_monologue(self):
-        self._event_queue.put_nowait(Whisper.Event(id=self._current_id,
-                                                   text=self._last_text,
-                                                   type=EVENT_TYPE_MONOLOGUE_UPDATED,
-                                                   time_seconds=self._write_index / WHISPER_SAMPLE_RATE))
+        self._event_queue.put_nowait(Transcriber.Event(id=self._current_id,
+                                                       text=self._last_text,
+                                                       type=EVENT_TYPE_MONOLOGUE_UPDATED,
+                                                       time_seconds=self._write_index / WHISPER_SAMPLE_RATE))
 
     def _finish_monologue(self):
         self._in_monologue = False
-        self._event_queue.put_nowait(Whisper.Event(id=self._current_id,
-                                                   text=self._last_text,
-                                                   type=EVENT_TYPE_MONOLOGUE_FINISHED,
-                                                   time_seconds=self._write_index / WHISPER_SAMPLE_RATE))
+        self._event_queue.put_nowait(Transcriber.Event(id=self._current_id,
+                                                       text=self._last_text,
+                                                       type=EVENT_TYPE_MONOLOGUE_FINISHED,
+                                                       time_seconds=self._write_index / WHISPER_SAMPLE_RATE))
         self._last_text = ""
 
     def _start_silence(self):
         self._current_id += 1
-        self._event_queue.put_nowait(Whisper.Event(id=self._current_id,
-                                                   text="",
-                                                   type=EVENT_TYPE_NO_SPEECH,
-                                                   time_seconds=self._silence_buffer_count / WHISPER_SAMPLE_RATE))
+        self._event_queue.put_nowait(Transcriber.Event(id=self._current_id,
+                                                       text="",
+                                                       type=EVENT_TYPE_NO_SPEECH,
+                                                       time_seconds=self._silence_buffer_count / WHISPER_SAMPLE_RATE))
 
     def _update_silence(self):
-        self._event_queue.put_nowait(Whisper.Event(id=self._current_id,
-                                                   text="",
-                                                   type=EVENT_TYPE_NO_SPEECH,
-                                                   time_seconds=self._silence_buffer_count / WHISPER_SAMPLE_RATE))
+        self._event_queue.put_nowait(Transcriber.Event(id=self._current_id,
+                                                       text="",
+                                                       type=EVENT_TYPE_NO_SPEECH,
+                                                       time_seconds=self._silence_buffer_count / WHISPER_SAMPLE_RATE))
 
     def _transcribe(self, buffer: np.array) -> str:
         res = whisper.transcribe(model, buffer)
