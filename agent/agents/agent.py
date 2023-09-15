@@ -31,21 +31,10 @@ class Agent:
                 publication = self.participants[participantKey].tracks[publicationKey]
                 self._on_track_published(publication, self.participants[participantKey])
 
-    def _on_video_stream(self, stream: livekit.VideoStream, participant: livekit.Participant, track: livekit.Track):
-        self.video_streams.append(stream)
-        task = asyncio.get_event_loop().create_task(self.on_video_stream(stream, participant, track))
-        asyncio.get_event_loop().call_soon_threadsafe(task)
-
-    def _on_audio_stream(self, stream: livekit.AudioStream, participant: livekit.Participant, track: livekit.Track):
-        self.audio_streams.append(stream)
-        task = asyncio.create_task(self.on_audio_stream(stream, participant, track))
-        self.stream_tasks.add(task)
-        task.add_done_callback(self.stream_tasks.discard)
-
-    async def on_video_stream(self, stream: livekit.VideoStream, participant: livekit.Participant, track: livekit.Track):
+    def on_video_track(self, track: livekit.RemoteVideoTrack, participant: livekit.Participant):
         pass
 
-    async def on_audio_stream(self, stream: livekit.AudioStream, participant: livekit.Participant, track: livekit.Track):
+    def on_audio_track(self, track: livekit.RemoteAudioTrack, participant: livekit.Participant):
         pass
 
     def should_process(self, track: livekit.TrackPublication, participant: livekit.Participant) -> bool:
@@ -68,11 +57,9 @@ class Agent:
 
     def _on_track_subscribed(self, track: livekit.Track, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
         if publication.kind == 1:
-            audio_stream = livekit.AudioStream(track)
-            self._on_audio_stream(audio_stream, participant, track)
+            self.on_audio_track(track, participant)
         elif publication.kind == 2:
-            video_stream = livekit.VideoStream(track)
-            self._on_video_stream(video_stream, participant, track)
+            self.on_video_track(track, participant)
 
     def _on_track_unsubscribed(self, publication: livekit.RemoteTrackPublication, participant: livekit.RemoteParticipant):
         self.audio_streams = [stream for stream in self.audio_streams if stream.track.sid != publication.track_sid]

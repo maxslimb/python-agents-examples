@@ -1,8 +1,5 @@
 import openai
 
 class ChatGPT:
-    def __init__(self):
-        self.completion = openai.Completion()
-
-    async def GenerateText(prompt: str):
-        pass
+    async def GenerateText(self, prompt: str):
+        return await openai.Completion.acreate(model='gpt4', prompt=prompt)
