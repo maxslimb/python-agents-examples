@@ -17,9 +17,18 @@ class Message:
 
 
 class ChatGPT:
-    async def GenerateText(self, model: str, prompt: str, messages: [Message]):
-        prompt_message = Message(role=MessageRole.system, content=prompt)
+    def __init__(self, prompt: str, message_capacity: int):
+        self._prompt = prompt
+        self._messages: [Message] = []
+
+    def add_message(self, message: Message):
+        self._messages.append(message)
+        if len(self._messages) > 20:
+            self._messages.pop(0)
+
+    async def GenerateText(self, model: str):
+        prompt_message = Message(role=MessageRole.system, content=self._prompt)
         res = await openai.ChatCompletion.acreate(model=model,
                                                   n=1,
-                                                  messages=[prompt_message.toAPI()] + [m.toAPI() for m in messages])
+                                                  messages=[prompt_message.toAPI()] + [m.toAPI() for m in self._messages])
         return res.choices[0].message.content
