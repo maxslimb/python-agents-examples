@@ -4,14 +4,17 @@ import aiohttp
 import aiohttp_cors
 import dotenv
 import asyncio
+import openai
 
 from agents.transcription import Transcription
+from agents.kitt.kitt import Kitt 
 from agents.agent import Agent
 
 dotenv.load_dotenv()
 
 
 TOKEN_SERVICE_URL = os.environ.get("TOKEN_SERVICE_URL", "")
+openai.api_key = os.environ.get("OPENAI_API_KEY", "")
 PORT = 8000
 
 AGENTS: [Agent] = []
@@ -37,6 +40,10 @@ async def add_agent(request):
         participant = room.local_participant
         transcription = Transcription(participant=participant, room=room)
         AGENTS.append(transcription)
+    elif agent_type == 'kitt':
+        participant = room.local_participant
+        kitt = Kitt(participant=participant, room=room)
+        AGENTS.append(kitt)
 
     return aiohttp.web.json_response({'success': True})
 
