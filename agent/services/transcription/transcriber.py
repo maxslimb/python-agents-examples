@@ -12,7 +12,7 @@ import numpy as np
 model = whisper.load_model('tiny.en')
 
 WHISPER_SAMPLE_RATE = 16000
-STEP_SIZE_SECONDS = 2
+STEP_SIZE_SECONDS = 1
 MAX_MONOLOGUE_SECONDS = 30
 
 EVENT_TYPE_MONOLOGUE_STARTED = "monologue_started"

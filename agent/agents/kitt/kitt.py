@@ -2,6 +2,7 @@ import logging
 import asyncio
 import livekit
 import services.transcription as transcription
+import services.tts as tts
 from . import states
 
 from services.openai.chatgpt import (ChatGPT, Message, MessageRole)
@@ -18,6 +19,15 @@ class Kitt(Agent):
         super().__init__(*args, **kwargs)
         self.state: states.State = states.State_DoingNothing()
         self.chat_gpt = ChatGPT(prompt=PROMPT, message_capacity=20)
+        self.source = livekit.AudioSource(48000, 1)
+        self.track = livekit.LocalAudioTrack.create_audio_track('kitt-audio', self.source)
+        self.tts = tts.TTS(self.source, 48000, 1)
+        asyncio.create_task(self.publish_audio())
+
+    async def publish_audio(self):
+        options = livekit.TrackPublishOptions()
+        options.source = livekit.TrackSource.SOURCE_MICROPHONE
+        await self.room.local_participant.publish_track(self.track, options)
 
     def on_audio_track(
         self,
@@ -38,14 +48,13 @@ class Kitt(Agent):
             if self.state.type == states.StateType.DOING_NOTHING:
                 self._set_state(states.State_Listening())
         elif event.type == transcription.EVENT_TYPE_MONOLOGUE_UPDATED:
-            # Do nothing in this case for now
             pass
         elif event.type == transcription.EVENT_TYPE_MONOLOGUE_FINISHED:
             self.chat_gpt.add_message(Message(role=MessageRole.user, content=event.text))
-        elif event.type == transcription.EVENT_TYPE_NO_SPEECH:
-            # Start generating a response
-            if self.state.type == states.StateType.LISTENING and event.time_seconds > 1.0:
+            if self.state.type == states.StateType.LISTENING:
                 self._set_state(states.State_GeneratingResponse())
+        elif event.type == transcription.EVENT_TYPE_NO_SPEECH:
+            pass
 
     def _set_state(self, state: states.State):
         if state.type == states.StateType.DOING_NOTHING:
@@ -64,11 +73,11 @@ class Kitt(Agent):
 
     async def _state_generating_response(self):
         response = await self.chat_gpt.GenerateText(model='gpt-3.5-turbo')
-        print(response)
+        self.chat_gpt.add_message(Message(role=MessageRole.assistant, content=response))
         self._set_state(states.State_SpeakingResponse(text=response))
 
     async def _state_speaking_response(self, state: states.State_SpeakingResponse):
-        self.chat_gpt.add_message(Message(role=MessageRole.assistant, content=state.text))
+        await self.tts.generate_audio(state.text)
         self._set_state(states.State_DoingNothing())
 
     def should_process(
