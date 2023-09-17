@@ -34,6 +34,7 @@ class TTS:
             await ws.send(json.dumps(payload))
             await ws.send(json.dumps({"text": ""}))
 
+            remainder = b''
             while True:
                 try:
                     response = await ws.recv()
@@ -44,6 +45,7 @@ class TTS:
 
                         # pad chunk to fit 441 sample frames
                         if len(chunk) % (441 * 2) != 0:
+                            print("NEIL padding chunk")
                             chunk = chunk + b'\x00' * (441 * 2 - len(chunk) % (441 * 2))
 
                         buf_arr = np.frombuffer(chunk, dtype=np.int16)
