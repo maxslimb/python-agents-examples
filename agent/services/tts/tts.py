@@ -1,15 +1,11 @@
 import os
 import livekit
-import threading
-import asyncio
-import queue
 import numpy as np
-import requests
-import uuid
-import audioread
-from elevenlabs import generate, set_api_key, voices
-
-CHUNK_SIZE = 1024
+import websockets.client as wsclient
+import websockets.exceptions
+import aiohttp
+import json
+import base64
 
 
 class TTS:
@@ -18,66 +14,49 @@ class TTS:
         self._sample_rate = sample_rate
         self._num_channels = num_channels
         self._generated = False
-        set_api_key(os.environ["ELEVENLABS_API_KEY"])
+        self._voice_id = ""
 
     async def generate_audio(self, text: str):
-        t = threading.Thread(target=self._generate_audio_thread, args=(text,), daemon=True)
-        t.start()
+        if self._voice_id == "":
+            voices_url = "https://api.elevenlabs.io/v1/voices"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(voices_url) as resp:
+                    json_resp = await resp.json()
+                    voice = json_resp.get('voices', [])[0]
+                    self._voice_id = voice['voice_id']
 
-    def _generate_audio_http_thread(self, text: str):
-        loop = asyncio.new_event_loop()
-        t = loop.create_task(self._generate_audio_thread_http_async(text))
-        loop.run_until_complete(t)
+        uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{self._voice_id}/stream-input?model_id=eleven_monolingual_v1&output_format=pcm_44100"
 
-    async def _generate_audio_thread_async(self, text: str):
-        audio = generate(text, voice=voices()[0], latency=3)
+        async with wsclient.connect(uri) as ws:
+            payload = {"text": f"{text} ", "try_trigger_generation": True}
+            bos_message = {"text": " ", "xi_api_key": os.environ["ELEVENLABS_API_KEY"]}
+            await ws.send(json.dumps(bos_message))
+            await ws.send(json.dumps(payload))
+            await ws.send(json.dumps({"text": ""}))
 
-        # make dir if not exists
-        os.makedirs("/tmp/kitt", exist_ok=True)
+            while True:
+                try:
+                    response = await ws.recv()
+                    data = json.loads(response)
 
-        filename = f"/tmp/kitt/{uuid.uuid4()}.mp3"
+                    if data["audio"]:
+                        chunk = base64.b64decode(data["audio"])
 
-        # save to mp3
-        with open(filename, "wb") as f:
-            f.write(audio)
+                        # pad chunk to fit 441 sample frames
+                        if len(chunk) % (441 * 2) != 0:
+                            chunk = chunk + b'\x00' * (441 * 2 - len(chunk) % (441 * 2))
 
-        with audioread.audio_open(filename) as f:
-            print(f.channels, f.samplerate, f.duration)
-            frame_size = int(f.samplerate / 100)
-            for buf in f:
-                buf_arr = np.frombuffer(buf, dtype=np.int16)
-                for i in range(0, buf_arr.shape[0] - frame_size, frame_size):
-                    frame = livekit.AudioFrame.create(sample_rate=f.samplerate, num_channels=f.channels, samples_per_channel=frame_size)
-                    audio_data = np.ctypeslib.as_array(frame.data)
-                    np.copyto(audio_data, buf_arr[i:i + frame_size])
-                    resampled = frame.remix_and_resample(self._sample_rate, self._num_channels)
-                    await self._audio_source.capture_frame(resampled)
+                        buf_arr = np.frombuffer(chunk, dtype=np.int16)
 
-        # delete file
-        if os.path.exists(filename):
-            os.remove(filename)
-
-    # TODO: This is the http version that supports PCM and streaming,
-    # but we don't have the right account to use it yet
-    async def _generate_audio_thread_http_async(self, text: str):
-        body = self._create_elevenlabs_body(text)
-        headers = self._create_elevenlabs_header()
-        voices_url = "https://api.elevenlabs.io/v1/voices"
-
-        response = requests.get(voices_url, headers=headers, timeout=30)
-        voice = response.json().get('voices', [])[0]
-        voice_id = voice['voice_id']
-        stream_url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream?output_format=pcm_44100"
-        response = requests.post(stream_url, json=body, headers=headers, stream=True, timeout=30)
-        for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-            print("Got chunk: ", chunk)
-            if chunk:
-                frame = livekit.AudioFrame.create(sample_rate=48000, num_channels=1, samples_per_channel=480)
-                audio_data = np.ctypeslib.as_array(frame.data)
-                np.copyto(audio_data, chunk)
-
-    def _create_elevenlabs_header(self):
-        return {"Accept": "audio/x-wav;codec=pcm;rate=44100", "Content-Type": "application/json", "xi-api-key": os.environ["ELEVENLABS_API_KEY"]}
-
-    def _create_elevenlabs_body(self, text: str):
-        return {"text": text, "model_id": "eleven_monolingual_v1", "voice_settings": {"stability": 0.5, "similarity_boost": 0.5}}
+                        for i in range(0, buf_arr.shape[0] - 441, 441):
+                            frame = livekit.AudioFrame.create(sample_rate=self._sample_rate, num_channels=1, samples_per_channel=441)
+                            audio_data = np.ctypeslib.as_array(frame.data)
+                            np.copyto(audio_data, buf_arr[i: i + 441])
+                            resampled = frame.remix_and_resample(self._sample_rate, self._num_channels)
+                            await self._audio_source.capture_frame(resampled)
+                    else:
+                        print("No audio data in the response")
+                        break
+                except websockets.exceptions.ConnectionClosed:
+                    print("Connection closed")
+                    break

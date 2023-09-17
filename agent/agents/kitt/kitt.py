@@ -69,6 +69,7 @@ class Kitt(Agent):
         elif state.type == states.StateType.SPEAKING_RESPONSE:
             asyncio.create_task(self._state_speaking_response(state))
 
+        print("NEIL new state: ", state)
         self.state = state
 
     async def _state_generating_response(self):
