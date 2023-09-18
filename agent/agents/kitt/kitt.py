@@ -66,19 +66,13 @@ class Kitt(Agent):
                 logging.warning("Unexpected state transition")
                 return
             asyncio.create_task(self._state_generating_response())
-        elif state.type == states.StateType.SPEAKING_RESPONSE:
-            asyncio.create_task(self._state_speaking_response(state))
 
-        print("NEIL new state: ", state)
         self.state = state
 
     async def _state_generating_response(self):
-        response = await self.chat_gpt.GenerateText(model='gpt-3.5-turbo')
-        self.chat_gpt.add_message(Message(role=MessageRole.assistant, content=response))
-        self._set_state(states.State_SpeakingResponse(text=response))
-
-    async def _state_speaking_response(self, state: states.State_SpeakingResponse):
-        await self.tts.generate_audio(state.text)
+        resp = await self.chat_gpt.generate_text(model='gpt-3.5-turbo')
+        await self.tts.generate_audio(resp)
+        self.chat_gpt.add_message(Message(role=MessageRole.assistant, content=resp))
         self._set_state(states.State_DoingNothing())
 
     def should_process(

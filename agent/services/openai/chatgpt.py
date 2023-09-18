@@ -26,9 +26,19 @@ class ChatGPT:
         if len(self._messages) > 20:
             self._messages.pop(0)
 
-    async def GenerateText(self, model: str):
+    async def generate_text(self, model: str):
         prompt_message = Message(role=MessageRole.system, content=self._prompt)
         res = await openai.ChatCompletion.acreate(model=model,
                                                   n=1,
                                                   messages=[prompt_message.toAPI()] + [m.toAPI() for m in self._messages])
         return res.choices[0].message.content
+
+    async def generate_text_streamed(self, model: str):
+        prompt_message = Message(role=MessageRole.system, content=self._prompt)
+        async for chunk in await openai.ChatCompletion.acreate(model=model,
+                                                               n=1,
+                                                               stream=True,
+                                                               messages=[prompt_message.toAPI()] + [m.toAPI() for m in self._messages]):
+            content = chunk["choices"][0].get("delta", {}).get("content")
+            if content is not None:
+                yield content

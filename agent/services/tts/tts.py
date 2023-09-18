@@ -48,7 +48,6 @@ class TTS:
 
                         # pad chunk to fit 441 sample frames
                         if len(chunk) < 441 * 2:
-                            print("NEIL padding chunk")
                             chunk = chunk + b'\x00' * (441 * 2 - len(chunk))
                         else:
                             remainder = chunk[-(len(chunk) % (441 * 2)):]

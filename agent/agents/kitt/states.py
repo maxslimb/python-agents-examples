@@ -17,8 +17,3 @@ class State_Listening(State):
 @dataclass
 class State_GeneratingResponse(State):
     type = StateType.GENERATING_RESPONSE
-
-@dataclass
-class State_SpeakingResponse(State):
-    type = StateType.SPEAKING_RESPONSE
-    text: str
