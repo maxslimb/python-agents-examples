@@ -40,13 +40,18 @@ class TTS:
                     response = await ws.recv()
                     data = json.loads(response)
 
+                    if data['isFinal']:
+                        break
+
                     if data["audio"]:
-                        chunk = base64.b64decode(data["audio"])
+                        chunk = remainder + base64.b64decode(data["audio"])
 
                         # pad chunk to fit 441 sample frames
-                        if len(chunk) % (441 * 2) != 0:
+                        if len(chunk) < 441 * 2:
                             print("NEIL padding chunk")
-                            chunk = chunk + b'\x00' * (441 * 2 - len(chunk) % (441 * 2))
+                            chunk = chunk + b'\x00' * (441 * 2 - len(chunk))
+                        else:
+                            remainder = chunk[-(len(chunk) % (441 * 2)):]
 
                         buf_arr = np.frombuffer(chunk, dtype=np.int16)
 
@@ -56,9 +61,6 @@ class TTS:
                             np.copyto(audio_data, buf_arr[i: i + 441])
                             resampled = frame.remix_and_resample(self._sample_rate, self._num_channels)
                             await self._audio_source.capture_frame(resampled)
-                    else:
-                        print("No audio data in the response")
-                        break
                 except websockets.exceptions.ConnectionClosed:
                     print("Connection closed")
                     break
