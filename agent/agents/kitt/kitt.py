@@ -44,12 +44,12 @@ class Kitt(Agent):
         transcriber.start()
 
     def _transcriber_cb(self, event: transcription.Transcriber.Event, participant: livekit.Participant):
-        if event.type == transcription.EVENT_TYPE_MONOLOGUE_STARTED:
+        if event.type == transcription.EVENT_TYPE_TALKING_STARTED:
             if self.state.type == states.StateType.DOING_NOTHING:
                 self._set_state(states.State_Listening())
-        elif event.type == transcription.EVENT_TYPE_MONOLOGUE_UPDATED:
+        elif event.type == transcription.EVENT_TYPE_TALKING_UPDATED:
             pass
-        elif event.type == transcription.EVENT_TYPE_MONOLOGUE_FINISHED:
+        elif event.type == transcription.EVENT_TYPE_TALKING_FINISHED:
             self.chat_gpt.add_message(Message(role=MessageRole.user, content=event.text))
             if self.state.type == states.StateType.LISTENING:
                 self._set_state(states.State_GeneratingResponse())

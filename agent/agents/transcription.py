@@ -10,9 +10,6 @@ class Transcription(Agent):
         track: livekit.Track,
         participant: livekit.Participant,
     ):
-        if participant.identity != "caller":
-            return
-
         transcriber = Transcriber(audio_track=track, callback=self._transcriber_cb)
         transcriber.start()
 
@@ -22,4 +19,6 @@ class Transcription(Agent):
     def should_process(
         self, track: livekit.TrackPublication, participant: livekit.Participant
     ) -> bool:
+        if participant.identity != "caller":
+            return False
         return track.kind == 1

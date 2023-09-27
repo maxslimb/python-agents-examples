@@ -13,11 +13,11 @@ model = whisper.load_model('tiny.en')
 
 WHISPER_SAMPLE_RATE = 16000
 STEP_SIZE_SECONDS = 1
-MAX_MONOLOGUE_SECONDS = 30
+MAX_TALKING_SECONDS = 30
 
-EVENT_TYPE_MONOLOGUE_STARTED = "monologue_started"
-EVENT_TYPE_MONOLOGUE_FINISHED = "monologue_finished"
-EVENT_TYPE_MONOLOGUE_UPDATED = "monologue_updated"
+EVENT_TYPE_TALKING_STARTED = "monologue_started"
+EVENT_TYPE_TALKING_FINISHED = "monologue_finished"
+EVENT_TYPE_TALKING_UPDATED = "monologue_updated"
 EVENT_TYPE_NO_SPEECH = "no_speech"
 
 class Transcriber:
@@ -35,7 +35,7 @@ class Transcriber:
         self._main_event_loop = asyncio.get_event_loop()
         self._write_index = 0
         self._in_monologue = False
-        self._working_buffer = np.zeros(MAX_MONOLOGUE_SECONDS * WHISPER_SAMPLE_RATE, dtype=np.float32)
+        self._working_buffer = np.zeros(MAX_TALKING_SECONDS * WHISPER_SAMPLE_RATE, dtype=np.float32)
         self._delta_buffer_write_index = 0
         self._delta_buffer = np.zeros(WHISPER_SAMPLE_RATE * STEP_SIZE_SECONDS, dtype=np.float32)
         self._last_text = ""
@@ -79,46 +79,46 @@ class Transcriber:
                 if self._write_index >= len(self._working_buffer):
                     self._last_text = self._transcribe(self._working_buffer[0:self._write_index])
                     if self._in_monologue:
-                        self._finish_monologue()
+                        self._finish_talking()
 
                 self._working_buffer[self._write_index:self._write_index + len(self._delta_buffer)] = self._delta_buffer
                 self._write_index += len(self._delta_buffer)
                 self._last_text = self._transcribe(self._working_buffer[0:self._write_index])
 
                 if self._in_monologue:
-                    self._update_monologue()
+                    self._update_talking()
                 else:
-                    self._start_monologue()
+                    self._start_talking()
             else:
                 self._silence_buffer_count += WHISPER_SAMPLE_RATE * STEP_SIZE_SECONDS
                 if self._in_monologue:
-                    self._finish_monologue()
+                    self._finish_talking()
                     self._start_silence()
                 else:
                     self._update_silence()
 
-    def _start_monologue(self):
+    def _start_talking(self):
         self._in_monologue = True
         self._silence_buffer_count = 0
         self._current_id += 1
         event = Transcriber.Event(id=self._current_id,
                                   text=self._last_text,
-                                  type=EVENT_TYPE_MONOLOGUE_STARTED,
+                                  type=EVENT_TYPE_TALKING_STARTED,
                                   time_seconds=self._write_index / WHISPER_SAMPLE_RATE)
         self._main_event_loop.call_soon_threadsafe(self._callback, event)
 
-    def _update_monologue(self):
+    def _update_talking(self):
         event = Transcriber.Event(id=self._current_id,
                                   text=self._last_text,
-                                  type=EVENT_TYPE_MONOLOGUE_UPDATED,
+                                  type=EVENT_TYPE_TALKING_UPDATED,
                                   time_seconds=self._write_index / WHISPER_SAMPLE_RATE)
         self._main_event_loop.call_soon_threadsafe(self._callback, event)
 
-    def _finish_monologue(self):
+    def _finish_talking(self):
         self._in_monologue = False
         event = Transcriber.Event(id=self._current_id,
                                   text=self._last_text,
-                                  type=EVENT_TYPE_MONOLOGUE_FINISHED,
+                                  type=EVENT_TYPE_TALKING_FINISHED,
                                   time_seconds=self._write_index / WHISPER_SAMPLE_RATE)
         self._last_text = ""
         self._write_index = 0
