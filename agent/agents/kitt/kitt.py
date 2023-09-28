@@ -19,9 +19,9 @@ class Kitt(Agent):
         super().__init__(*args, **kwargs)
         self.state: states.State = states.State_DoingNothing()
         self.chat_gpt = ChatGPT(prompt=PROMPT, message_capacity=20)
-        self.source = livekit.AudioSource(48000, 1)
+        self.source = livekit.AudioSource(44100, 1)
         self.track = livekit.LocalAudioTrack.create_audio_track('kitt-audio', self.source)
-        self.tts = tts.TTS(self.source, 48000, 1)
+        self.tts = tts.TTS(self.source, 44100, 1)
         asyncio.create_task(self.publish_audio())
 
     async def publish_audio(self):

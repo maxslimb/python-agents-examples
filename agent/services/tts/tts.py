@@ -68,7 +68,7 @@ class TTS:
                 if data["audio"]:
                     chunk = base64.b64decode(data["audio"])
                     buf_arr = np.frombuffer(chunk, dtype=np.int16)
-                    frame = livekit.AudioFrame.create(sample_rate=self._sample_rate, num_channels=1, samples_per_channel=buf_arr.shape[0])
+                    frame = livekit.AudioFrame.create(sample_rate=44100, num_channels=1, samples_per_channel=buf_arr.shape[0])
                     audio_data = np.ctypeslib.as_array(frame.data)
                     np.copyto(audio_data, buf_arr)
                     await self._audio_source.capture_frame(frame)
