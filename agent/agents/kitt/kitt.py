@@ -60,7 +60,7 @@ class Kitt(Agent):
         if state.type == states.StateType.DOING_NOTHING:
             pass
         elif state.type == states.StateType.LISTENING:
-            pass
+            asyncio.create_task(self.tts.warmup())
         elif state.type == states.StateType.GENERATING_RESPONSE:
             if self.state.type != states.StateType.LISTENING:
                 logging.warning("Unexpected state transition")
@@ -70,9 +70,17 @@ class Kitt(Agent):
         self.state = state
 
     async def _state_generating_response(self):
-        resp = await self.chat_gpt.generate_text(model='gpt-3.5-turbo')
-        await self.tts.generate_audio(resp)
-        self.chat_gpt.add_message(Message(role=MessageRole.assistant, content=resp))
+        text_queue = asyncio.Queue()
+        asyncio.create_task(self.tts.stream_generate_audio(text_queue=text_queue))
+        full_result = ""
+        async for chunk in self.chat_gpt.generate_text_streamed(model='gpt-3.5-turbo'):
+            await text_queue.put(chunk)
+            full_result += chunk
+
+        # Signal that we are done sending text
+        await text_queue.put(None)
+        print("full result", full_result)
+        self.chat_gpt.add_message(Message(role=MessageRole.assistant, content=full_result))
         self._set_state(states.State_DoingNothing())
 
     def should_process(
