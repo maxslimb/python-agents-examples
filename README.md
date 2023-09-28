@@ -2,7 +2,7 @@
 
 Example project demonstrating a number of different AI agents running in a python server environment using the new `client-sdk-python` from LiveKit
 
-Fill out a .env file with the following
+Fill out a .env file with the following in the agents/ directory
 
 ```
 TOKEN_SERVICE_URL=http://localhost:3000
