@@ -56,7 +56,6 @@ class TTS:
             await asyncio.sleep(0.1)
 
         try:
-            remainder = b''
             while True:
                 response = await self._ws.recv()
                 data = json.loads(response)
@@ -67,22 +66,12 @@ class TTS:
                     return
 
                 if data["audio"]:
-                    chunk = remainder + base64.b64decode(data["audio"])
-
-                    # pad chunk to fit 441 sample frames
-                    if len(chunk) < 441 * 2:
-                        chunk = chunk + b'\x00' * (441 * 2 - len(chunk))
-                    else:
-                        remainder = chunk[-(len(chunk) % (441 * 2)):]
-
+                    chunk = base64.b64decode(data["audio"])
                     buf_arr = np.frombuffer(chunk, dtype=np.int16)
-
-                    for i in range(0, buf_arr.shape[0] - 441, 441):
-                        frame = livekit.AudioFrame.create(sample_rate=self._sample_rate, num_channels=1, samples_per_channel=441)
-                        audio_data = np.ctypeslib.as_array(frame.data)
-                        np.copyto(audio_data, buf_arr[i: i + 441])
-                        resampled = frame.remix_and_resample(self._sample_rate, self._num_channels)
-                        await self._audio_source.capture_frame(resampled)
+                    frame = livekit.AudioFrame.create(sample_rate=self._sample_rate, num_channels=1, samples_per_channel=buf_arr.shape[0])
+                    audio_data = np.ctypeslib.as_array(frame.data)
+                    np.copyto(audio_data, buf_arr)
+                    await self._audio_source.capture_frame(frame)
         except websockets.exceptions.ConnectionClosed:
             print("Connection closed")
             return
