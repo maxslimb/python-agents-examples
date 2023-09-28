@@ -56,25 +56,46 @@ class TTS:
             await asyncio.sleep(0.1)
 
         try:
+            remainder = b''
             while True:
                 response = await self._ws.recv()
                 data = json.loads(response)
 
                 if data['isFinal']:
                     print("Is Final Closing the Websocket")
+                    if len(remainder) > 0:
+                        if len(remainder) < 441 * 2:
+                            remainder = remainder + b'\x00' * (441 * 2 - len(remainder))
+                        await self._audio_source.capture_frame(self._create_frame_from_chunk(remainder))
                     await self._ws.close()
                     return
 
                 if data["audio"]:
-                    chunk = base64.b64decode(data["audio"])
+                    chunk = remainder + base64.b64decode(data["audio"])
+
+                    # pad chunk to fit 441 sample frames
+                    if len(chunk) < 441 * 2:
+                        remainder = chunk
+                        print("Continuing because we don't have 10ms")
+                        continue
+                    else:
+                        print("Setting remainder to mod")
+                        remainder = chunk[-(len(chunk) % (441 * 2)):]
+
                     buf_arr = np.frombuffer(chunk, dtype=np.int16)
-                    frame = livekit.AudioFrame.create(sample_rate=44100, num_channels=1, samples_per_channel=buf_arr.shape[0])
-                    audio_data = np.ctypeslib.as_array(frame.data)
-                    np.copyto(audio_data, buf_arr)
-                    await self._audio_source.capture_frame(frame)
+
+                    for i in range(0, buf_arr.shape[0] - 441, 441):
+                        await self._audio_source.capture_frame(self._create_frame_from_chunk(buf_arr[i: i + 441]))
         except websockets.exceptions.ConnectionClosed:
             print("Connection closed")
             return
+
+    def _create_frame_from_chunk(self, chunk: bytes):
+        frame = livekit.AudioFrame.create(sample_rate=self._sample_rate, num_channels=self._num_channels, samples_per_channel=441)
+        audio_data = np.ctypeslib.as_array(frame.data)
+        np.copyto(audio_data, np.frombuffer(chunk, dtype=np.int16))
+        resampled = frame.remix_and_resample(self._sample_rate, self._num_channels)
+        return resampled
 
     async def _get_voice_id_if_needed(self):
         if self._voice_id == "":
