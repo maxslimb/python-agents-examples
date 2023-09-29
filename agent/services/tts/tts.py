@@ -1,3 +1,4 @@
+import time
 import asyncio
 import os
 import livekit
@@ -14,6 +15,7 @@ class TTS:
         self._sample_rate = sample_rate
         self._num_channels = num_channels
         self._voice_id = ""
+        self._generating_response = False
         self._ws: wsclient.WebSocketClientProtocol = None
 
     async def warmup(self):
@@ -25,6 +27,7 @@ class TTS:
 
         await self._get_voice_id_if_needed()
         asyncio.create_task(self._receive_audio_loop())
+        asyncio.create_task(self._send_empty_audio())
         uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{self._voice_id}/stream-input?model_id=eleven_monolingual_v1&output_format=pcm_44100&optimize_streaming_latency=2"
         self._ws = await wsclient.connect(uri)
         bos_message = {"text": " ", "xi_api_key": os.environ["ELEVENLABS_API_KEY"]}
@@ -46,26 +49,40 @@ class TTS:
             text = await text_queue.get()
             if text is None:
                 await self._ws.send(json.dumps({"text": ""}))
-                return
+                break
 
             payload = {"text": f"{text} ", "try_trigger_generation": True}
             await self._ws.send(json.dumps(payload))
+
+    async def _send_empty_audio(self):
+        while True:
+            if self._generating_response is False:
+                frame = livekit.AudioFrame.create(sample_rate=self._sample_rate,
+                                                  num_channels=self._num_channels,
+                                                  samples_per_channel=441)
+                await self._audio_source.capture_frame(frame)
+            else:
+                await asyncio.sleep(0.05)
 
     async def _receive_audio_loop(self):
         while self._ws is None or self._ws.open is False:
             await asyncio.sleep(0.1)
 
+        frame_size_bytes = 441 * 2  # 10ms at 44.1k * 2 bytes per sample (int16) * 1 channels
+
         try:
             remainder = b''
             while True:
                 response = await self._ws.recv()
+                self._generating_response = True
                 data = json.loads(response)
 
                 if data['isFinal']:
                     print("Is Final Closing the Websocket")
                     if len(remainder) > 0:
-                        if len(remainder) < 441 * 2:
-                            remainder = remainder + b'\x00' * (441 * 2 - len(remainder))
+                        if len(remainder) < frame_size_bytes:
+                            remainder = remainder + b'\x00' * (frame_size_bytes - len(remainder))
+                        print("Sending remaining % bytes", len(remainder))
                         await self._audio_source.capture_frame(self._create_frame_from_chunk(remainder))
                     await self._ws.close()
                     return
@@ -73,25 +90,28 @@ class TTS:
                 if data["audio"]:
                     chunk = remainder + base64.b64decode(data["audio"])
 
-                    # pad chunk to fit 441 sample frames
-                    if len(chunk) < 441 * 2:
+                    if len(chunk) < frame_size_bytes:
                         remainder = chunk
-                        print("Continuing because we don't have 10ms")
                         continue
                     else:
-                        print("Setting remainder to mod")
-                        remainder = chunk[-(len(chunk) % (441 * 2)):]
+                        remainder = chunk[-(len(chunk) % (frame_size_bytes)):]
+                        chunk = chunk[:-len(remainder)]
 
-                    buf_arr = np.frombuffer(chunk, dtype=np.int16)
+                    for i in range(0, len(chunk), frame_size_bytes):
+                        start_time = time.time_ns()
+                        await self._audio_source.capture_frame(self._create_frame_from_chunk(chunk[i: i + frame_size_bytes]))
+                        end_time = time.time_ns()
+                        # print("Time to create a frame: % ms", (end_time - start_time) / 1000000)
 
-                    for i in range(0, buf_arr.shape[0] - 441, 441):
-                        await self._audio_source.capture_frame(self._create_frame_from_chunk(buf_arr[i: i + 441]))
         except websockets.exceptions.ConnectionClosed:
+            self._generating_response = False
             print("Connection closed")
             return
+        finally:
+            self._generating_response = False
 
     def _create_frame_from_chunk(self, chunk: bytes):
-        frame = livekit.AudioFrame.create(sample_rate=self._sample_rate, num_channels=self._num_channels, samples_per_channel=441)
+        frame = livekit.AudioFrame.create(sample_rate=44100, num_channels=1, samples_per_channel=441)  # Eleven labs format 
         audio_data = np.ctypeslib.as_array(frame.data)
         np.copyto(audio_data, np.frombuffer(chunk, dtype=np.int16))
         resampled = frame.remix_and_resample(self._sample_rate, self._num_channels)
