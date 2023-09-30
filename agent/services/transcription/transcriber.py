@@ -47,6 +47,7 @@ class Transcriber:
 
     def _create_stream(self):
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         stream = livekit.AudioStream(self._audio_track, loop)
         loop.run_until_complete(self._process_loop(stream))
 
@@ -141,6 +142,8 @@ class Transcriber:
 
     def _transcribe(self, buffer: np.array) -> str:
         res = whisper.transcribe(model, buffer)
+
+        #print(res)
 
         segments = res.get('segments', [])
         result = ""
